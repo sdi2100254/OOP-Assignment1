@@ -1,6 +1,6 @@
 #include "GridWorld.h"
-#include "WorldObject.h" // Need full definition here
-#include "StaticObjects.h" // Need these to create objects in populate()
+#include "WorldObject.h" 
+#include "StaticObjects.h" 
 #include "MovingObjects.h"
 #include <iostream>
 #include <algorithm>
