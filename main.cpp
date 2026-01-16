@@ -1,11 +1,13 @@
 #include <chrono>
 #include <cstdlib>
+#include <algorithm>
 #include <iomanip>
 #include <iostream>
 #include <memory>
 #include <random>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <vector>
 
@@ -58,21 +60,15 @@ class WorldObject {
 
 class GridWorld {
  public:
-  GridWorld(int width, int height)
-      : width_(width), height_(height), grid_(width * height, nullptr) {}
+  GridWorld(int width, int height) : width_(width), height_(height) {}
 
   bool inBounds(const Position& position) const {
     return position.x >= 0 && position.y >= 0 && position.x < width_ &&
            position.y < height_;
   }
 
-  void updateAllObjects() {
-    for (WorldObject* object : grid_) {
-      if (object) {
-        object->update();
-      }
-    }
-  }
+  void updateAllObjects();
+  void populate(const SimulationParams& params, std::mt19937& rng);
 
   int width() const { return width_; }
   int height() const { return height_; }
@@ -80,7 +76,7 @@ class GridWorld {
  private:
   int width_;
   int height_;
-  std::vector<WorldObject*> grid_;
+  std::vector<std::unique_ptr<WorldObject>> objects_;
 };
 
 namespace {
@@ -266,6 +262,72 @@ class MovingBike : public MovingObject {
   ~MovingBike() override { std::cout << "[-BIKE: " << id() << "] Removed.\n"; }
 };
 
+void GridWorld::updateAllObjects() {
+  for (const auto& object : objects_) {
+    if (object) {
+      object->update();
+    }
+  }
+  std::erase_if(objects_, [](const std::unique_ptr<WorldObject>& object) {
+    return object && object->markedForRemoval();
+  });
+}
+
+void GridWorld::populate(const SimulationParams& params, std::mt19937& rng) {
+  const int capacity = width_ * height_;
+  const int total_objects =
+      params.numMovingCars + params.numMovingBikes + params.numParkedCars +
+      params.numStopSigns + params.numTrafficLights;
+  if (total_objects > capacity) {
+    throw std::runtime_error("Too many objects for the grid size.");
+  }
+
+  objects_.clear();
+  std::unordered_set<int> used_positions;
+  std::uniform_int_distribution<int> x_dist(0, width_ - 1);
+  std::uniform_int_distribution<int> y_dist(0, height_ - 1);
+  std::uniform_int_distribution<int> direction_dist(0, 3);
+
+  auto randomPosition = [&]() {
+    Position position;
+    int index = 0;
+    do {
+      position = {x_dist(rng), y_dist(rng)};
+      index = position.y * width_ + position.x;
+    } while (!used_positions.insert(index).second);
+    return position;
+  };
+
+  auto randomDirection = [&]() {
+    return static_cast<Direction>(direction_dist(rng));
+  };
+
+  for (int i = 0; i < params.numMovingCars; ++i) {
+    Position position = randomPosition();
+    objects_.push_back(std::make_unique<MovingCar>(position, this, 1, randomDirection()));
+  }
+
+  for (int i = 0; i < params.numMovingBikes; ++i) {
+    Position position = randomPosition();
+    objects_.push_back(std::make_unique<MovingBike>(position, this, 1, randomDirection()));
+  }
+
+  for (int i = 0; i < params.numParkedCars; ++i) {
+    Position position = randomPosition();
+    objects_.push_back(std::make_unique<ParkedCar>(position, this));
+  }
+
+  for (int i = 0; i < params.numStopSigns; ++i) {
+    Position position = randomPosition();
+    objects_.push_back(std::make_unique<StopSign>(position, this));
+  }
+
+  for (int i = 0; i < params.numTrafficLights; ++i) {
+    Position position = randomPosition();
+    objects_.push_back(std::make_unique<TrafficLight>(position, this, rng));
+  }
+}
+
 class AutonomousVehicle {
  public:
   explicit AutonomousVehicle(Position start) : position_(start) {}
@@ -444,6 +506,7 @@ int main(int argc, char* argv[]) {
 
   std::mt19937 rng(params.seed);
   GridWorld world(params.dimX, params.dimY);
+  world.populate(params, rng);
   AutonomousVehicle vehicle(params.gpsPath.front());
 
   for (int tick = 0; tick < params.simulationTicks; ++tick) {
