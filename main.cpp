@@ -5,6 +5,7 @@
 #include <memory>
 #include <random>
 #include <sstream>
+#include <unordered_map>
 #include <string>
 #include <vector>
 
@@ -27,10 +28,32 @@ struct SimulationParams {
   std::vector<Position> gpsPath;
 };
 
+class GridWorld;
+
 class WorldObject {
  public:
+  WorldObject(std::string id, char glyph, Position position, const GridWorld* world)
+      : id_(std::move(id)), glyph_(glyph), position_(position), world_(world) {}
   virtual ~WorldObject() = default;
+
+  const std::string& id() const { return id_; }
+  char glyph() const { return glyph_; }
+  const Position& position() const { return position_; }
+  bool markedForRemoval() const { return marked_for_removal_; }
+
   virtual void update() {}
+
+ protected:
+  void setPosition(const Position& position) { position_ = position; }
+  void markForRemoval() { marked_for_removal_ = true; }
+  const GridWorld* world() const { return world_; }
+
+ private:
+  std::string id_;
+  char glyph_;
+  Position position_;
+  bool marked_for_removal_{false};
+  const GridWorld* world_;
 };
 
 class GridWorld {
@@ -58,6 +81,189 @@ class GridWorld {
   int width_;
   int height_;
   std::vector<WorldObject*> grid_;
+};
+
+namespace {
+
+std::string generateId(const std::string& category) {
+  static std::unordered_map<std::string, int> counts;
+  int next = ++counts[category];
+  return category + ":" + std::to_string(next);
+}
+
+std::string toString(const Position& position) {
+  std::ostringstream stream;
+  stream << "(" << position.x << ", " << position.y << ")";
+  return stream.str();
+}
+
+}  // namespace
+
+enum class Direction { Up, Down, Left, Right };
+
+class StaticObject : public WorldObject {
+ public:
+  StaticObject(std::string id, char glyph, Position position, const GridWorld* world)
+      : WorldObject(std::move(id), glyph, position, world) {}
+};
+
+class StopSign : public StaticObject {
+ public:
+  StopSign(const Position& position, const GridWorld* world)
+      : StaticObject(generateId("STOP"), 'S', position, world) {
+    std::cout << "[+STOP: " << id() << "] Initialized at " << toString(position) << ".\n";
+  }
+
+  ~StopSign() override { std::cout << "[-STOP: " << id() << "] Removed.\n"; }
+};
+
+class ParkedCar : public StaticObject {
+ public:
+  ParkedCar(const Position& position, const GridWorld* world)
+      : StaticObject(generateId("PARKED_CAR"), 'P', position, world) {
+    std::cout << "[+PARKED_CAR: " << id() << "] Initialized at " << toString(position)
+              << ".\n";
+  }
+
+  ~ParkedCar() override { std::cout << "[-PARKED_CAR: " << id() << "] Removed.\n"; }
+};
+
+class TrafficLight : public StaticObject {
+ public:
+  enum class State { Red, Yellow, Green };
+
+  TrafficLight(const Position& position, const GridWorld* world, std::mt19937& rng)
+      : StaticObject(generateId("LIGHT"), 'L', position, world),
+        state_(randomState(rng)) {
+    std::cout << "[+LIGHT: " << id() << "] Initialized at " << toString(position)
+              << " to " << stateName(state_) << ".\n";
+  }
+
+  ~TrafficLight() override { std::cout << "[-LIGHT: " << id() << "] Removed.\n"; }
+
+  void update() override {
+    ++ticks_in_state_;
+    if (ticks_in_state_ >= ticksForState(state_)) {
+      ticks_in_state_ = 0;
+      state_ = nextState(state_);
+    }
+  }
+
+ private:
+  static State randomState(std::mt19937& rng) {
+    std::uniform_int_distribution<int> dist(0, 2);
+    return static_cast<State>(dist(rng));
+  }
+
+  static int ticksForState(State state) {
+    switch (state) {
+      case State::Red:
+        return 4;
+      case State::Green:
+        return 8;
+      case State::Yellow:
+        return 2;
+    }
+    return 4;
+  }
+
+  static State nextState(State state) {
+    switch (state) {
+      case State::Red:
+        return State::Green;
+      case State::Green:
+        return State::Yellow;
+      case State::Yellow:
+        return State::Red;
+    }
+    return State::Red;
+  }
+
+  static std::string stateName(State state) {
+    switch (state) {
+      case State::Red:
+        return "RED";
+      case State::Green:
+        return "GREEN";
+      case State::Yellow:
+        return "YELLOW";
+    }
+    return "RED";
+  }
+
+  State state_;
+  int ticks_in_state_{0};
+};
+
+class MovingObject : public WorldObject {
+ public:
+  MovingObject(std::string id,
+               char glyph,
+               Position position,
+               const GridWorld* world,
+               int speed,
+               Direction direction)
+      : WorldObject(std::move(id), glyph, position, world),
+        speed_(speed),
+        direction_(direction) {}
+
+  void update() override {
+    Position next = position();
+    switch (direction_) {
+      case Direction::Up:
+        next.y -= speed_;
+        break;
+      case Direction::Down:
+        next.y += speed_;
+        break;
+      case Direction::Left:
+        next.x -= speed_;
+        break;
+      case Direction::Right:
+        next.x += speed_;
+        break;
+    }
+    setPosition(next);
+    if (world() && !world()->inBounds(next)) {
+      markForRemoval();
+    }
+  }
+
+ protected:
+  int speed() const { return speed_; }
+  Direction direction() const { return direction_; }
+
+ private:
+  int speed_;
+  Direction direction_;
+};
+
+class MovingCar : public MovingObject {
+ public:
+  MovingCar(const Position& position,
+            const GridWorld* world,
+            int speed,
+            Direction direction)
+      : MovingObject(generateId("CAR"), 'C', position, world, speed, direction) {
+    std::cout << "[+CAR: " << id() << "] Initialized at " << toString(position)
+              << " moving at speed " << speed << ".\n";
+  }
+
+  ~MovingCar() override { std::cout << "[-CAR: " << id() << "] Removed.\n"; }
+};
+
+class MovingBike : public MovingObject {
+ public:
+  MovingBike(const Position& position,
+             const GridWorld* world,
+             int speed,
+             Direction direction)
+      : MovingObject(generateId("BIKE"), 'B', position, world, speed, direction) {
+    std::cout << "[+BIKE: " << id() << "] Initialized at " << toString(position)
+              << " moving at speed " << speed << ".\n";
+  }
+
+  ~MovingBike() override { std::cout << "[-BIKE: " << id() << "] Removed.\n"; }
 };
 
 class AutonomousVehicle {
