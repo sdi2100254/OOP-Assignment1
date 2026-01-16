@@ -83,6 +83,17 @@ class GridWorld {
 
 namespace {
 
+template <typename T>
+T my_clamp(T value, T minimum, T maximum) {
+  if (value < minimum) {
+    return minimum;
+  }
+  if (value > maximum) {
+    return maximum;
+  }
+  return value;
+}
+
 std::string generateId(const std::string& category) {
   static std::unordered_map<std::string, int> counts;
   int next = ++counts[category];
@@ -286,7 +297,7 @@ class Sensor {
     static std::mt19937 rng(std::random_device{}());
     std::uniform_real_distribution<double> noise_dist(-0.05, 0.05);
     double confidence = baseAccuracy * (1.0 - (distance / maxRange)) + noise_dist(rng);
-    return std::clamp(confidence, 0.0, 1.0);
+    return my_clamp(confidence, 0.0, 1.0);
   }
 };
 
@@ -318,10 +329,62 @@ std::string objectType(const WorldObject& object) {
 }
 
 double distanceBetween(const Position& a, const Position& b) {
-  return std::hypot(static_cast<double>(a.x - b.x), static_cast<double>(a.y - b.y));
+  return static_cast<double>(std::abs(a.x - b.x) + std::abs(a.y - b.y));
 }
 
 }  // namespace
+
+class SensorFusion {
+ public:
+  std::vector<SensorReading> fuse(
+      const std::vector<std::vector<SensorReading>>& allReadings,
+      double minConfidence) const {
+    struct Aggregate {
+      SensorReading best_reading;
+      double confidence_sum{0.0};
+      std::size_t count{0};
+      std::string traffic_state{"UNKNOWN"};
+      double traffic_state_confidence{0.0};
+    };
+
+    std::unordered_map<std::string, Aggregate> grouped;
+
+    for (const auto& readings : allReadings) {
+      for (const auto& reading : readings) {
+        auto& bucket = grouped[reading.id];
+        if (bucket.count == 0 || reading.confidence > bucket.best_reading.confidence) {
+          bucket.best_reading = reading;
+        }
+        if (reading.trafficLightState != "UNKNOWN" &&
+            (bucket.traffic_state == "UNKNOWN" ||
+             reading.confidence > bucket.traffic_state_confidence)) {
+          bucket.traffic_state = reading.trafficLightState;
+          bucket.traffic_state_confidence = reading.confidence;
+        }
+        bucket.confidence_sum += reading.confidence;
+        ++bucket.count;
+      }
+    }
+
+    std::vector<SensorReading> fused;
+    fused.reserve(grouped.size());
+    for (const auto& entry : grouped) {
+      const auto& bucket = entry.second;
+      SensorReading fused_reading = bucket.best_reading;
+      fused_reading.confidence = bucket.count > 0
+                                     ? bucket.confidence_sum /
+                                           static_cast<double>(bucket.count)
+                                     : 0.0;
+      fused_reading.trafficLightState = bucket.traffic_state;
+
+      if (fused_reading.type == "MovingBike" ||
+          fused_reading.confidence > minConfidence) {
+        fused.push_back(std::move(fused_reading));
+      }
+    }
+    return fused;
+  }
+};
 
 class LidarSensor : public Sensor {
  public:
@@ -534,15 +597,21 @@ class AutonomousVehicle {
     // Placeholder for future navigation logic.
   }
 
-  void sense(const GridWorld& world) {
+  void sense(const GridWorld& world, double minConfidence) {
     std::size_t total_readings = 0;
+    std::vector<std::vector<SensorReading>> all_readings;
+    all_readings.reserve(sensors_.size());
     for (const auto& sensor : sensors_) {
       if (!sensor) {
         continue;
       }
-      total_readings += sensor->detect(world, position_, direction_).size();
+      std::vector<SensorReading> readings = sensor->detect(world, position_, direction_);
+      total_readings += readings.size();
+      all_readings.push_back(std::move(readings));
     }
-    std::cout << "[SENSORS] Total readings: " << total_readings << "\n";
+    fused_data_ = fusion_engine_.fuse(all_readings, minConfidence);
+    std::cout << "[FUSION] Fused " << fused_data_.size() << " unique objects from "
+              << total_readings << " total readings.\n";
   }
 
   const Position& position() const { return position_; }
@@ -552,6 +621,8 @@ class AutonomousVehicle {
   Position position_;
   Direction direction_{Direction::Up};
   std::vector<std::unique_ptr<Sensor>> sensors_;
+  SensorFusion fusion_engine_;
+  std::vector<SensorReading> fused_data_;
 };
 
 namespace {
@@ -724,7 +795,7 @@ int main(int argc, char* argv[]) {
   for (int tick = 0; tick < params.simulationTicks; ++tick) {
     world.updateAllObjects();
     vehicle.update();
-    vehicle.sense(world);
+    vehicle.sense(world, params.minConfidenceThreshold);
 
     if (!world.inBounds(vehicle.position())) {
       std::cout << "Vehicle left the grid at tick " << tick << ".\n";
