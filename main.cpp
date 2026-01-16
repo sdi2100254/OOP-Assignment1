@@ -683,8 +683,18 @@ class Visualization {
   char glyphAt(const GridWorld& world, const Position& position, const AutonomousVehicle* vehicle) const {
     // 1. Vehicle (@) - Highest Priority
     if (vehicle && vehicle->position().x == position.x && vehicle->position().y == position.y) return '@';
+
+    // 2. Moving Bike (B) - Higher priority than Car per Section 4.1
+    for (const auto& object : world.getObjects()) {
+      if (object && object->position().x == position.x && object->position().y == position.y && dynamic_cast<const MovingBike*>(object.get())) return 'B';
+    }
+
+    // 3. Moving Car (C)
+    for (const auto& object : world.getObjects()) {
+      if (object && object->position().x == position.x && object->position().y == position.y && dynamic_cast<const MovingCar*>(object.get())) return 'C';
+    }
     
-    // 2. Traffic Lights (R/G/Y)
+    // 4. Traffic Lights (R/G/Y)
     for (const auto& object : world.getObjects()) {
       if (object && object->position().x == position.x && object->position().y == position.y) {
           if (const auto* light = dynamic_cast<const TrafficLight*>(object.get())) {
@@ -697,20 +707,12 @@ class Visualization {
       }
     }
     
-    // 3. Stop Sign (S)
+    // 5. Stop Sign (S)
     for (const auto& object : world.getObjects()) {
       if (object && object->position().x == position.x && object->position().y == position.y && dynamic_cast<const StopSign*>(object.get())) return 'S';
     }
 
-    // 4. Moving Bike (B) - Higher priority than Car per Section 4.1
-    for (const auto& object : world.getObjects()) {
-      if (object && object->position().x == position.x && object->position().y == position.y && dynamic_cast<const MovingBike*>(object.get())) return 'B';
-    }
 
-    // 5. Moving Car (C)
-    for (const auto& object : world.getObjects()) {
-      if (object && object->position().x == position.x && object->position().y == position.y && dynamic_cast<const MovingCar*>(object.get())) return 'C';
-    }
     
     // 6. Parked Car (P)
     for (const auto& object : world.getObjects()) {
