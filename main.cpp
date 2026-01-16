@@ -11,8 +11,11 @@
 #include <unordered_set>
 #include <string>
 #include <vector>
-#include <windows.h>
+#include <windows.h> // REQUIRED for Sleep() on Windows
 
+// ==========================================
+//           Data Structures
+// ==========================================
 
 struct Position {
   int x{0};
@@ -33,7 +36,14 @@ struct SimulationParams {
   std::vector<Position> gpsPath;
 };
 
+// ==========================================
+//           Forward Declarations
+// ==========================================
 class GridWorld;
+
+// ==========================================
+//           World Objects
+// ==========================================
 
 class WorldObject {
  public:
@@ -83,16 +93,16 @@ class GridWorld {
   std::vector<std::unique_ptr<WorldObject>> objects_;
 };
 
+// ==========================================
+//           Helpers & Enums
+// ==========================================
+
 namespace {
 
 template <typename T>
 T my_clamp(T value, T minimum, T maximum) {
-  if (value < minimum) {
-    return minimum;
-  }
-  if (value > maximum) {
-    return maximum;
-  }
+  if (value < minimum) return minimum;
+  if (value > maximum) return maximum;
   return value;
 }
 
@@ -108,9 +118,17 @@ std::string toString(const Position& position) {
   return stream.str();
 }
 
+double distanceBetween(const Position& a, const Position& b) {
+  return static_cast<double>(std::abs(a.x - b.x) + std::abs(a.y - b.y));
+}
+
 }  // namespace
 
 enum class Direction { Up, Down, Left, Right };
+
+// ==========================================
+//           Concrete Objects
+// ==========================================
 
 class StaticObject : public WorldObject {
  public:
@@ -122,21 +140,18 @@ class StopSign : public StaticObject {
  public:
   StopSign(const Position& position, const GridWorld* world)
       : StaticObject(generateId("STOP"), 'S', position, world) {
-    std::cout << "[+STOP: " << id() << "] Initialized at " << toString(position) << ".\n";
+    // std::cout << "[+STOP: " << id() << "] Initialized at " << toString(position) << ".\n";
   }
-
-  ~StopSign() override { std::cout << "[-STOP: " << id() << "] Removed.\n"; }
+  // ~StopSign() override { std::cout << "[-STOP: " << id() << "] Removed.\n"; }
 };
 
 class ParkedCar : public StaticObject {
  public:
   ParkedCar(const Position& position, const GridWorld* world)
       : StaticObject(generateId("PARKED_CAR"), 'P', position, world) {
-    std::cout << "[+PARKED_CAR: " << id() << "] Initialized at " << toString(position)
-              << ".\n";
+    // std::cout << "[+PARKED_CAR: " << id() << "] Initialized at " << toString(position) << ".\n";
   }
-
-  ~ParkedCar() override { std::cout << "[-PARKED_CAR: " << id() << "] Removed.\n"; }
+  // ~ParkedCar() override { std::cout << "[-PARKED_CAR: " << id() << "] Removed.\n"; }
 };
 
 class TrafficLight : public StaticObject {
@@ -146,11 +161,10 @@ class TrafficLight : public StaticObject {
   TrafficLight(const Position& position, const GridWorld* world, std::mt19937& rng)
       : StaticObject(generateId("LIGHT"), 'L', position, world),
         state_(randomState(rng)) {
-    std::cout << "[+LIGHT: " << id() << "] Initialized at " << toString(position)
-              << " to " << stateName(state_) << ".\n";
+    // std::cout << "[+LIGHT: " << id() << "] Initialized at " << toString(position) << " to " << stateName(state_) << ".\n";
   }
 
-  ~TrafficLight() override { std::cout << "[-LIGHT: " << id() << "] Removed.\n"; }
+  // ~TrafficLight() override { std::cout << "[-LIGHT: " << id() << "] Removed.\n"; }
 
   void update() override {
     ++ticks_in_state_;
@@ -170,36 +184,27 @@ class TrafficLight : public StaticObject {
 
   static int ticksForState(State state) {
     switch (state) {
-      case State::Red:
-        return 4;
-      case State::Green:
-        return 8;
-      case State::Yellow:
-        return 2;
+      case State::Red: return 4;
+      case State::Green: return 8;
+      case State::Yellow: return 2;
     }
     return 4;
   }
 
   static State nextState(State state) {
     switch (state) {
-      case State::Red:
-        return State::Green;
-      case State::Green:
-        return State::Yellow;
-      case State::Yellow:
-        return State::Red;
+      case State::Red: return State::Green;
+      case State::Green: return State::Yellow;
+      case State::Yellow: return State::Red;
     }
     return State::Red;
   }
 
   static std::string stateName(State state) {
     switch (state) {
-      case State::Red:
-        return "RED";
-      case State::Green:
-        return "GREEN";
-      case State::Yellow:
-        return "YELLOW";
+      case State::Red: return "RED";
+      case State::Green: return "GREEN";
+      case State::Yellow: return "YELLOW";
     }
     return "RED";
   }
@@ -223,18 +228,10 @@ class MovingObject : public WorldObject {
   void update() override {
     Position next = position();
     switch (direction_) {
-      case Direction::Up:
-        next.y -= speed_;
-        break;
-      case Direction::Down:
-        next.y += speed_;
-        break;
-      case Direction::Left:
-        next.x -= speed_;
-        break;
-      case Direction::Right:
-        next.x += speed_;
-        break;
+      case Direction::Up:    next.y -= speed_; break;
+      case Direction::Down:  next.y += speed_; break;
+      case Direction::Left:  next.x -= speed_; break;
+      case Direction::Right: next.x += speed_; break;
     }
     setPosition(next);
     if (world() && !world()->inBounds(next)) {
@@ -253,31 +250,25 @@ class MovingObject : public WorldObject {
 
 class MovingCar : public MovingObject {
  public:
-  MovingCar(const Position& position,
-            const GridWorld* world,
-            int speed,
-            Direction direction)
+  MovingCar(const Position& position, const GridWorld* world, int speed, Direction direction)
       : MovingObject(generateId("CAR"), 'C', position, world, speed, direction) {
-    std::cout << "[+CAR: " << id() << "] Initialized at " << toString(position)
-              << " moving at speed " << speed << ".\n";
+    // std::cout << "[+CAR: " << id() << "] Initialized at " << toString(position) << ".\n";
   }
-
-  ~MovingCar() override { std::cout << "[-CAR: " << id() << "] Removed.\n"; }
+  // ~MovingCar() override { std::cout << "[-CAR: " << id() << "] Removed.\n"; }
 };
 
 class MovingBike : public MovingObject {
  public:
-  MovingBike(const Position& position,
-             const GridWorld* world,
-             int speed,
-             Direction direction)
+  MovingBike(const Position& position, const GridWorld* world, int speed, Direction direction)
       : MovingObject(generateId("BIKE"), 'B', position, world, speed, direction) {
-    std::cout << "[+BIKE: " << id() << "] Initialized at " << toString(position)
-              << " moving at speed " << speed << ".\n";
+    // std::cout << "[+BIKE: " << id() << "] Initialized at " << toString(position) << ".\n";
   }
-
-  ~MovingBike() override { std::cout << "[-BIKE: " << id() << "] Removed.\n"; }
+  // ~MovingBike() override { std::cout << "[-BIKE: " << id() << "] Removed.\n"; }
 };
+
+// ==========================================
+//           Sensors & Fusion
+// ==========================================
 
 struct SensorReading {
   Position position;
@@ -293,7 +284,6 @@ class Sensor {
   virtual std::vector<SensorReading> detect(const GridWorld& world,
                                             const Position& vehiclePos,
                                             Direction vehicleDir) = 0;
-
  protected:
   double calculateConfidence(double baseAccuracy, double distance, double maxRange) const {
     static std::mt19937 rng(std::random_device{}());
@@ -304,43 +294,21 @@ class Sensor {
 };
 
 namespace {
-
 std::string objectType(const WorldObject& object) {
-  if (dynamic_cast<const MovingCar*>(&object)) {
-    return "MovingCar";
-  }
-  if (dynamic_cast<const MovingBike*>(&object)) {
-    return "MovingBike";
-  }
-  if (dynamic_cast<const ParkedCar*>(&object)) {
-    return "ParkedCar";
-  }
-  if (dynamic_cast<const StopSign*>(&object)) {
-    return "StopSign";
-  }
-  if (dynamic_cast<const TrafficLight*>(&object)) {
-    return "TrafficLight";
-  }
-  if (dynamic_cast<const MovingObject*>(&object)) {
-    return "MovingObject";
-  }
-  if (dynamic_cast<const StaticObject*>(&object)) {
-    return "StaticObject";
-  }
+  if (dynamic_cast<const MovingCar*>(&object)) return "MovingCar";
+  if (dynamic_cast<const MovingBike*>(&object)) return "MovingBike";
+  if (dynamic_cast<const ParkedCar*>(&object)) return "ParkedCar";
+  if (dynamic_cast<const StopSign*>(&object)) return "StopSign";
+  if (dynamic_cast<const TrafficLight*>(&object)) return "TrafficLight";
+  if (dynamic_cast<const MovingObject*>(&object)) return "MovingObject";
+  if (dynamic_cast<const StaticObject*>(&object)) return "StaticObject";
   return "WorldObject";
 }
-
-double distanceBetween(const Position& a, const Position& b) {
-  return static_cast<double>(std::abs(a.x - b.x) + std::abs(a.y - b.y));
 }
-
-}  // namespace
 
 class SensorFusion {
  public:
-  std::vector<SensorReading> fuse(
-      const std::vector<std::vector<SensorReading>>& allReadings,
-      double minConfidence) const {
+  std::vector<SensorReading> fuse(const std::vector<std::vector<SensorReading>>& allReadings, double minConfidence) const {
     struct Aggregate {
       SensorReading best_reading;
       double confidence_sum{0.0};
@@ -350,7 +318,6 @@ class SensorFusion {
     };
 
     std::unordered_map<std::string, Aggregate> grouped;
-
     for (const auto& readings : allReadings) {
       for (const auto& reading : readings) {
         auto& bucket = grouped[reading.id];
@@ -358,8 +325,7 @@ class SensorFusion {
           bucket.best_reading = reading;
         }
         if (reading.trafficLightState != "UNKNOWN" &&
-            (bucket.traffic_state == "UNKNOWN" ||
-             reading.confidence > bucket.traffic_state_confidence)) {
+            (bucket.traffic_state == "UNKNOWN" || reading.confidence > bucket.traffic_state_confidence)) {
           bucket.traffic_state = reading.trafficLightState;
           bucket.traffic_state_confidence = reading.confidence;
         }
@@ -373,14 +339,10 @@ class SensorFusion {
     for (const auto& entry : grouped) {
       const auto& bucket = entry.second;
       SensorReading fused_reading = bucket.best_reading;
-      fused_reading.confidence = bucket.count > 0
-                                     ? bucket.confidence_sum /
-                                           static_cast<double>(bucket.count)
-                                     : 0.0;
+      fused_reading.confidence = bucket.count > 0 ? bucket.confidence_sum / static_cast<double>(bucket.count) : 0.0;
       fused_reading.trafficLightState = bucket.traffic_state;
 
-      if (fused_reading.type == "MovingBike" ||
-          fused_reading.confidence > minConfidence) {
+      if (fused_reading.type == "MovingBike" || fused_reading.confidence > minConfidence) {
         fused.push_back(std::move(fused_reading));
       }
     }
@@ -388,26 +350,23 @@ class SensorFusion {
   }
 };
 
+// ==========================================
+//           Specific Sensors
+// ==========================================
+
 class LidarSensor : public Sensor {
  public:
-  std::vector<SensorReading> detect(const GridWorld& world,
-                                    const Position& vehiclePos,
-                                    Direction /*vehicleDir*/) override {
+  std::vector<SensorReading> detect(const GridWorld& world, const Position& vehiclePos, Direction) override {
     constexpr double kRange = 9.0;
     constexpr double kBaseAccuracy = 0.99;
     std::vector<SensorReading> readings;
     for (const auto& object : world.getObjects()) {
-      if (!object) {
-        continue;
-      }
+      if (!object) continue;
       const Position& pos = object->position();
-      if (std::abs(pos.x - vehiclePos.x) > 4 || std::abs(pos.y - vehiclePos.y) > 4) {
-        continue;
-      }
+      if (std::abs(pos.x - vehiclePos.x) > 4 || std::abs(pos.y - vehiclePos.y) > 4) continue;
       double distance = distanceBetween(vehiclePos, pos);
-      if (distance > kRange) {
-        continue;
-      }
+      if (distance > kRange) continue;
+      
       SensorReading reading;
       reading.position = pos;
       reading.type = objectType(*object);
@@ -421,44 +380,34 @@ class LidarSensor : public Sensor {
 
 class RadarSensor : public Sensor {
  public:
-  std::vector<SensorReading> detect(const GridWorld& world,
-                                    const Position& vehiclePos,
-                                    Direction vehicleDir) override {
+  std::vector<SensorReading> detect(const GridWorld& world, const Position& vehiclePos, Direction vehicleDir) override {
     constexpr double kRange = 12.0;
     constexpr double kBaseAccuracy = 0.95;
     std::vector<SensorReading> readings;
     for (const auto& object : world.getObjects()) {
-      if (!object || !dynamic_cast<const MovingObject*>(object.get())) {
-        continue;
-      }
+      if (!object || !dynamic_cast<const MovingObject*>(object.get())) continue;
       const Position& pos = object->position();
       bool in_line = false;
       double distance = 0.0;
       switch (vehicleDir) {
         case Direction::Up:
-          in_line = pos.x == vehiclePos.x && pos.y <= vehiclePos.y - 1 &&
-                    pos.y >= vehiclePos.y - static_cast<int>(kRange);
+          in_line = pos.x == vehiclePos.x && pos.y <= vehiclePos.y - 1 && pos.y >= vehiclePos.y - static_cast<int>(kRange);
           distance = static_cast<double>(vehiclePos.y - pos.y);
           break;
         case Direction::Down:
-          in_line = pos.x == vehiclePos.x && pos.y >= vehiclePos.y + 1 &&
-                    pos.y <= vehiclePos.y + static_cast<int>(kRange);
+          in_line = pos.x == vehiclePos.x && pos.y >= vehiclePos.y + 1 && pos.y <= vehiclePos.y + static_cast<int>(kRange);
           distance = static_cast<double>(pos.y - vehiclePos.y);
           break;
         case Direction::Left:
-          in_line = pos.y == vehiclePos.y && pos.x <= vehiclePos.x - 1 &&
-                    pos.x >= vehiclePos.x - static_cast<int>(kRange);
+          in_line = pos.y == vehiclePos.y && pos.x <= vehiclePos.x - 1 && pos.x >= vehiclePos.x - static_cast<int>(kRange);
           distance = static_cast<double>(vehiclePos.x - pos.x);
           break;
         case Direction::Right:
-          in_line = pos.y == vehiclePos.y && pos.x >= vehiclePos.x + 1 &&
-                    pos.x <= vehiclePos.x + static_cast<int>(kRange);
+          in_line = pos.y == vehiclePos.y && pos.x >= vehiclePos.x + 1 && pos.x <= vehiclePos.x + static_cast<int>(kRange);
           distance = static_cast<double>(pos.x - vehiclePos.x);
           break;
       }
-      if (!in_line) {
-        continue;
-      }
+      if (!in_line) continue;
       SensorReading reading;
       reading.position = pos;
       reading.type = objectType(*object);
@@ -472,39 +421,24 @@ class RadarSensor : public Sensor {
 
 class CameraSensor : public Sensor {
  public:
-  std::vector<SensorReading> detect(const GridWorld& world,
-                                    const Position& vehiclePos,
-                                    Direction vehicleDir) override {
+  std::vector<SensorReading> detect(const GridWorld& world, const Position& vehiclePos, Direction vehicleDir) override {
     constexpr double kRange = 7.0;
     constexpr double kBaseAccuracy = 0.90;
     std::vector<SensorReading> readings;
     Position center = vehiclePos;
     switch (vehicleDir) {
-      case Direction::Up:
-        center.y -= 4;
-        break;
-      case Direction::Down:
-        center.y += 4;
-        break;
-      case Direction::Left:
-        center.x -= 4;
-        break;
-      case Direction::Right:
-        center.x += 4;
-        break;
+      case Direction::Up:    center.y -= 4; break;
+      case Direction::Down:  center.y += 4; break;
+      case Direction::Left:  center.x -= 4; break;
+      case Direction::Right: center.x += 4; break;
     }
     for (const auto& object : world.getObjects()) {
-      if (!object) {
-        continue;
-      }
+      if (!object) continue;
       const Position& pos = object->position();
-      if (std::abs(pos.x - center.x) > 3 || std::abs(pos.y - center.y) > 3) {
-        continue;
-      }
+      if (std::abs(pos.x - center.x) > 3 || std::abs(pos.y - center.y) > 3) continue;
       double distance = distanceBetween(vehiclePos, pos);
-      if (distance > kRange) {
-        continue;
-      }
+      if (distance > kRange) continue;
+      
       SensorReading reading;
       reading.position = pos;
       reading.type = objectType(*object);
@@ -521,9 +455,7 @@ class CameraSensor : public Sensor {
 
 void GridWorld::updateAllObjects() {
   for (const auto& object : objects_) {
-    if (object) {
-      object->update();
-    }
+    if (object) object->update();
   }
   auto it = std::remove_if(objects_.begin(), objects_.end(),
                            [](const std::unique_ptr<WorldObject>& object) {
@@ -534,12 +466,9 @@ void GridWorld::updateAllObjects() {
 
 void GridWorld::populate(const SimulationParams& params, std::mt19937& rng) {
   const int capacity = width_ * height_;
-  const int total_objects =
-      params.numMovingCars + params.numMovingBikes + params.numParkedCars +
-      params.numStopSigns + params.numTrafficLights;
-  if (total_objects > capacity) {
-    throw std::runtime_error("Too many objects for the grid size.");
-  }
+  const int total_objects = params.numMovingCars + params.numMovingBikes + params.numParkedCars +
+                            params.numStopSigns + params.numTrafficLights;
+  if (total_objects > capacity) throw std::runtime_error("Too many objects for the grid size.");
 
   objects_.clear();
   std::unordered_set<int> used_positions;
@@ -556,36 +485,18 @@ void GridWorld::populate(const SimulationParams& params, std::mt19937& rng) {
     } while (!used_positions.insert(index).second);
     return position;
   };
+  auto randomDirection = [&]() { return static_cast<Direction>(direction_dist(rng)); };
 
-  auto randomDirection = [&]() {
-    return static_cast<Direction>(direction_dist(rng));
-  };
-
-  for (int i = 0; i < params.numMovingCars; ++i) {
-    Position position = randomPosition();
-    objects_.push_back(std::make_unique<MovingCar>(position, this, 1, randomDirection()));
-  }
-
-  for (int i = 0; i < params.numMovingBikes; ++i) {
-    Position position = randomPosition();
-    objects_.push_back(std::make_unique<MovingBike>(position, this, 1, randomDirection()));
-  }
-
-  for (int i = 0; i < params.numParkedCars; ++i) {
-    Position position = randomPosition();
-    objects_.push_back(std::make_unique<ParkedCar>(position, this));
-  }
-
-  for (int i = 0; i < params.numStopSigns; ++i) {
-    Position position = randomPosition();
-    objects_.push_back(std::make_unique<StopSign>(position, this));
-  }
-
-  for (int i = 0; i < params.numTrafficLights; ++i) {
-    Position position = randomPosition();
-    objects_.push_back(std::make_unique<TrafficLight>(position, this, rng));
-  }
+  for (int i = 0; i < params.numMovingCars; ++i) objects_.push_back(std::make_unique<MovingCar>(randomPosition(), this, 1, randomDirection()));
+  for (int i = 0; i < params.numMovingBikes; ++i) objects_.push_back(std::make_unique<MovingBike>(randomPosition(), this, 1, randomDirection()));
+  for (int i = 0; i < params.numParkedCars; ++i) objects_.push_back(std::make_unique<ParkedCar>(randomPosition(), this));
+  for (int i = 0; i < params.numStopSigns; ++i) objects_.push_back(std::make_unique<StopSign>(randomPosition(), this));
+  for (int i = 0; i < params.numTrafficLights; ++i) objects_.push_back(std::make_unique<TrafficLight>(randomPosition(), this, rng));
 }
+
+// ==========================================
+//           Autonomous Vehicle
+// ==========================================
 
 class AutonomousVehicle {
  public:
@@ -596,60 +507,41 @@ class AutonomousVehicle {
     sensors_.push_back(std::make_unique<CameraSensor>());
   }
 
-  void update() {
-    decideNextMove();
-  }
+  void update() { decideNextMove(); }
 
   void sense(const GridWorld& world, double minConfidence) {
-    std::size_t total_readings = 0;
     std::vector<std::vector<SensorReading>> all_readings;
-    all_readings.reserve(sensors_.size());
     for (const auto& sensor : sensors_) {
-      if (!sensor) {
-        continue;
-      }
-      std::vector<SensorReading> readings = sensor->detect(world, position_, direction_);
-      total_readings += readings.size();
-      all_readings.push_back(std::move(readings));
+      if (sensor) all_readings.push_back(sensor->detect(world, position_, direction_));
     }
     fused_data_ = fusion_engine_.fuse(all_readings, minConfidence);
-    std::cout << "[FUSION] Fused " << fused_data_.size() << " unique objects from "
-              << total_readings << " total readings.\n";
+    // Silent for animation mode
   }
 
   const Position& position() const { return position_; }
   Direction direction() const { return direction_; }
+  int speed() const { return speed_state_; }
+  Position target() const { 
+      if(current_gps_index_ < gps_path_.size()) return gps_path_[current_gps_index_];
+      return position_;
+  }
 
  private:
   bool checkEmergencyStop(const std::vector<SensorReading>& objects) {
     for (const auto& object : objects) {
       bool in_front = false;
       switch (direction_) {
-        case Direction::Up:
-          in_front = object.position.y < position_.y;
-          break;
-        case Direction::Down:
-          in_front = object.position.y > position_.y;
-          break;
-        case Direction::Left:
-          in_front = object.position.x < position_.x;
-          break;
-        case Direction::Right:
-          in_front = object.position.x > position_.x;
-          break;
+        case Direction::Up:    in_front = object.position.y < position_.y; break;
+        case Direction::Down:  in_front = object.position.y > position_.y; break;
+        case Direction::Left:  in_front = object.position.x < position_.x; break;
+        case Direction::Right: in_front = object.position.x > position_.x; break;
       }
-      if (!in_front) {
-        continue;
-      }
+      if (!in_front) continue;
 
       double distance = distanceBetween(position_, object.position);
-      if (distance <= 2.0) {
-        return true;
-      }
-      if (object.type == "TrafficLight" &&
-          (object.trafficLightState == "RED" || object.trafficLightState == "YELLOW") &&
-          distance < 3.0) {
-        return true;
+      if (distance <= 2.0) return true; // Safety Check
+      if (object.type == "TrafficLight" && (object.trafficLightState == "RED" || object.trafficLightState == "YELLOW") && distance < 3.0) {
+        return true; // Light Check
       }
     }
     return false;
@@ -671,52 +563,25 @@ class AutonomousVehicle {
     if (distanceBetween(position_, target) == 0.0) {
       ++current_gps_index_;
       if (current_gps_index_ >= static_cast<int>(gps_path_.size())) {
-        std::cout << "Destination Reached!\n";
         speed_state_ = 0;
         return;
       }
       target = gps_path_[current_gps_index_];
     }
 
-    if (position_.x < target.x) {
-      direction_ = Direction::Right;
-    } else if (position_.x > target.x) {
-      direction_ = Direction::Left;
-    } else if (position_.y < target.y) {
-      direction_ = Direction::Down;
-    } else if (position_.y > target.y) {
-      direction_ = Direction::Up;
-    }
+    if (position_.x < target.x) direction_ = Direction::Right;
+    else if (position_.x > target.x) direction_ = Direction::Left;
+    else if (position_.y < target.y) direction_ = Direction::Down;
+    else if (position_.y > target.y) direction_ = Direction::Up;
 
-    std::cout << "[NAV] Pos: " << toString(position_) << " -> Target: "
-              << toString(target) << " | Speed: " << speed_state_ << ".\n";
-
-    if (speed_state_ == 0) {
-      return;
-    }
+    if (speed_state_ == 0) return;
 
     Position next = position_;
     switch (direction_) {
-      case Direction::Up: {
-        int delta = std::min(speed_state_, std::abs(position_.y - target.y));
-        next.y -= delta;
-        break;
-      }
-      case Direction::Down: {
-        int delta = std::min(speed_state_, std::abs(position_.y - target.y));
-        next.y += delta;
-        break;
-      }
-      case Direction::Left: {
-        int delta = std::min(speed_state_, std::abs(position_.x - target.x));
-        next.x -= delta;
-        break;
-      }
-      case Direction::Right: {
-        int delta = std::min(speed_state_, std::abs(position_.x - target.x));
-        next.x += delta;
-        break;
-      }
+      case Direction::Up:    next.y -= std::min(speed_state_, std::abs(position_.y - target.y)); break;
+      case Direction::Down:  next.y += std::min(speed_state_, std::abs(position_.y - target.y)); break;
+      case Direction::Left:  next.x -= std::min(speed_state_, std::abs(position_.x - target.x)); break;
+      case Direction::Right: next.x += std::min(speed_state_, std::abs(position_.x - target.x)); break;
     }
     position_ = next;
   }
@@ -731,157 +596,9 @@ class AutonomousVehicle {
   int speed_state_{0};
 };
 
-namespace {
-
-std::string usageMessage(const char* programName) {
-  std::ostringstream message;
-  message << "Usage: " << programName << " [options]\n"
-          << "Options:\n"
-          << "  --seed <n>                     Random seed (default: current time)\n"
-          << "  --dimX <n>                     Grid width (default: 40)\n"
-          << "  --dimY <n>                     Grid height (default: 40)\n"
-          << "  --simulationTicks <n>          Simulation tick count (default: 100)\n"
-          << "  --minConfidenceThreshold <n>   Minimum confidence threshold (default: 0.40)\n"
-          << "  --numMovingCars <n>            Number of moving cars\n"
-          << "  --numMovingBikes <n>           Number of moving bikes\n"
-          << "  --numParkedCars <n>            Number of parked cars\n"
-          << "  --numStopSigns <n>             Number of stop signs\n"
-          << "  --numTrafficLights <n>         Number of traffic lights\n"
-          << "  --gps <x1> <y1> <x2> <y2>...    Required GPS coordinates (pairs)\n"
-          << "  --help                         Show this help message\n";
-  return message.str();
-}
-
-bool isFlag(const std::string& arg) {
-  return arg.rfind("--", 0) == 0;
-}
-
-int parseInt(const std::string& value, const std::string& flag) {
-  try {
-    size_t idx = 0;
-    int parsed = std::stoi(value, &idx);
-    if (idx != value.size()) {
-      throw std::invalid_argument("extra characters");
-    }
-    return parsed;
-  } catch (const std::exception&) {
-    throw std::runtime_error("Invalid value for " + flag + ": " + value);
-  }
-}
-
-unsigned int parseUInt(const std::string& value, const std::string& flag) {
-  try {
-    size_t idx = 0;
-    unsigned long parsed = std::stoul(value, &idx);
-    if (idx != value.size()) {
-      throw std::invalid_argument("extra characters");
-    }
-    return static_cast<unsigned int>(parsed);
-  } catch (const std::exception&) {
-    throw std::runtime_error("Invalid value for " + flag + ": " + value);
-  }
-}
-
-double parseDouble(const std::string& value, const std::string& flag) {
-  try {
-    size_t idx = 0;
-    double parsed = std::stod(value, &idx);
-    if (idx != value.size()) {
-      throw std::invalid_argument("extra characters");
-    }
-    return parsed;
-  } catch (const std::exception&) {
-    throw std::runtime_error("Invalid value for " + flag + ": " + value);
-  }
-}
-
-SimulationParams parseArgs(int argc, char* argv[]) {
-  SimulationParams params;
-  params.seed = static_cast<unsigned int>(
-      std::chrono::system_clock::now().time_since_epoch().count());
-
-  for (int i = 1; i < argc; ++i) {
-    std::string arg = argv[i];
-    if (arg == "--help") {
-      std::cout << usageMessage(argv[0]);
-      std::exit(0);
-    } else if (arg == "--seed") {
-      if (i + 1 >= argc) {
-        throw std::runtime_error("Missing value for --seed");
-      }
-      params.seed = parseUInt(argv[++i], "--seed");
-    } else if (arg == "--dimX") {
-      if (i + 1 >= argc) {
-        throw std::runtime_error("Missing value for --dimX");
-      }
-      params.dimX = parseInt(argv[++i], "--dimX");
-    } else if (arg == "--dimY") {
-      if (i + 1 >= argc) {
-        throw std::runtime_error("Missing value for --dimY");
-      }
-      params.dimY = parseInt(argv[++i], "--dimY");
-    } else if (arg == "--simulationTicks") {
-      if (i + 1 >= argc) {
-        throw std::runtime_error("Missing value for --simulationTicks");
-      }
-      params.simulationTicks = parseInt(argv[++i], "--simulationTicks");
-    } else if (arg == "--minConfidenceThreshold") {
-      if (i + 1 >= argc) {
-        throw std::runtime_error("Missing value for --minConfidenceThreshold");
-      }
-      params.minConfidenceThreshold =
-          parseDouble(argv[++i], "--minConfidenceThreshold");
-    } else if (arg == "--numMovingCars") {
-      if (i + 1 >= argc) {
-        throw std::runtime_error("Missing value for --numMovingCars");
-      }
-      params.numMovingCars = parseInt(argv[++i], "--numMovingCars");
-    } else if (arg == "--numMovingBikes") {
-      if (i + 1 >= argc) {
-        throw std::runtime_error("Missing value for --numMovingBikes");
-      }
-      params.numMovingBikes = parseInt(argv[++i], "--numMovingBikes");
-    } else if (arg == "--numParkedCars") {
-      if (i + 1 >= argc) {
-        throw std::runtime_error("Missing value for --numParkedCars");
-      }
-      params.numParkedCars = parseInt(argv[++i], "--numParkedCars");
-    } else if (arg == "--numStopSigns") {
-      if (i + 1 >= argc) {
-        throw std::runtime_error("Missing value for --numStopSigns");
-      }
-      params.numStopSigns = parseInt(argv[++i], "--numStopSigns");
-    } else if (arg == "--numTrafficLights") {
-      if (i + 1 >= argc) {
-        throw std::runtime_error("Missing value for --numTrafficLights");
-      }
-      params.numTrafficLights = parseInt(argv[++i], "--numTrafficLights");
-    } else if (arg == "--gps") {
-      if (i + 1 >= argc) {
-        throw std::runtime_error("Missing coordinates for --gps");
-      }
-
-      while (i + 1 < argc && !isFlag(argv[i + 1])) {
-        if (i + 2 >= argc || isFlag(argv[i + 2])) {
-          throw std::runtime_error("GPS coordinates must be in x y pairs");
-        }
-        int x = parseInt(argv[++i], "--gps");
-        int y = parseInt(argv[++i], "--gps");
-        params.gpsPath.push_back({x, y});
-      }
-    } else {
-      throw std::runtime_error("Unknown argument: " + arg);
-    }
-  }
-
-  if (params.gpsPath.empty()) {
-    throw std::runtime_error("--gps is required and must contain at least one pair");
-  }
-
-  return params;
-}
-
-}  // namespace
+// ==========================================
+//           Visualization (Colors!)
+// ==========================================
 
 class Visualization {
  public:
@@ -916,89 +633,6 @@ class Visualization {
   }
 
  private:
-  void printColored(char glyph) const {
-    switch (glyph) {
-      case 'R':
-      case 'S':
-        std::cout << RED << glyph << RESET;
-        break;
-      case 'G':
-        std::cout << GREEN << glyph << RESET;
-        break;
-      case 'Y':
-        std::cout << YELLOW << glyph << RESET;
-        break;
-      case 'C':
-        std::cout << BLUE << glyph << RESET;
-        break;
-      case 'B':
-        std::cout << MAGENTA << glyph << RESET;
-        break;
-      case '@':
-        std::cout << CYAN << glyph << RESET;
-        break;
-      default:
-        std::cout << glyph;
-        break;
-    }
-  }
-
-  char glyphAt(const GridWorld& world,
-               const Position& position,
-               const AutonomousVehicle* vehicle) const {
-    if (vehicle && vehicle->position().x == position.x &&
-        vehicle->position().y == position.y) {
-      return '@';
-    }
-    for (const auto& object : world.getObjects()) {
-      if (object && object->position().x == position.x &&
-          object->position().y == position.y &&
-          dynamic_cast<const TrafficLight*>(object.get())) {
-        const auto* light = dynamic_cast<const TrafficLight*>(object.get());
-        const std::string state = light ? light->currentStateName() : "RED";
-        if (state == "RED") {
-          return 'R';
-        }
-        if (state == "GREEN") {
-          return 'G';
-        }
-        if (state == "YELLOW") {
-          return 'Y';
-        }
-        return 'L';
-      }
-    }
-    for (const auto& object : world.getObjects()) {
-      if (object && object->position().x == position.x &&
-          object->position().y == position.y &&
-          dynamic_cast<const StopSign*>(object.get())) {
-        return 'S';
-      }
-    }
-    for (const auto& object : world.getObjects()) {
-      if (object && object->position().x == position.x &&
-          object->position().y == position.y &&
-          dynamic_cast<const MovingCar*>(object.get())) {
-        return 'C';
-      }
-    }
-    for (const auto& object : world.getObjects()) {
-      if (object && object->position().x == position.x &&
-          object->position().y == position.y &&
-          dynamic_cast<const MovingBike*>(object.get())) {
-        return 'B';
-      }
-    }
-    for (const auto& object : world.getObjects()) {
-      if (object && object->position().x == position.x &&
-          object->position().y == position.y &&
-          dynamic_cast<const ParkedCar*>(object.get())) {
-        return 'P';
-      }
-    }
-    return '.';
-  }
-
   const std::string RESET = "\033[0m";
   const std::string RED = "\033[31m";
   const std::string GREEN = "\033[32m";
@@ -1006,17 +640,91 @@ class Visualization {
   const std::string BLUE = "\033[34m";
   const std::string MAGENTA = "\033[35m";
   const std::string CYAN = "\033[36m";
+
+  void printColored(char glyph) const {
+    if (glyph == 'R' || glyph == 'S') std::cout << RED << glyph << RESET;
+    else if (glyph == 'G') std::cout << GREEN << glyph << RESET;
+    else if (glyph == 'Y') std::cout << YELLOW << glyph << RESET;
+    else if (glyph == 'C') std::cout << BLUE << glyph << RESET;
+    else if (glyph == 'B') std::cout << MAGENTA << glyph << RESET;
+    else if (glyph == '@') std::cout << CYAN << glyph << RESET;
+    else std::cout << glyph;
+  }
+
+  char glyphAt(const GridWorld& world, const Position& position, const AutonomousVehicle* vehicle) const {
+    if (vehicle && vehicle->position().x == position.x && vehicle->position().y == position.y) return '@';
+    for (const auto& object : world.getObjects()) {
+      if (object && object->position().x == position.x && object->position().y == position.y) {
+          if (const auto* light = dynamic_cast<const TrafficLight*>(object.get())) {
+             std::string state = light->currentStateName();
+             if (state == "RED") return 'R';
+             if (state == "GREEN") return 'G';
+             if (state == "YELLOW") return 'Y';
+             return 'L';
+          }
+      }
+    }
+    for (const auto& object : world.getObjects()) {
+      if (object && object->position().x == position.x && object->position().y == position.y && dynamic_cast<const StopSign*>(object.get())) return 'S';
+    }
+    for (const auto& object : world.getObjects()) {
+      if (object && object->position().x == position.x && object->position().y == position.y && dynamic_cast<const MovingCar*>(object.get())) return 'C';
+    }
+    for (const auto& object : world.getObjects()) {
+      if (object && object->position().x == position.x && object->position().y == position.y && dynamic_cast<const MovingBike*>(object.get())) return 'B';
+    }
+    for (const auto& object : world.getObjects()) {
+      if (object && object->position().x == position.x && object->position().y == position.y && dynamic_cast<const ParkedCar*>(object.get())) return 'P';
+    }
+    return '.';
+  }
 };
+
+// ==========================================
+//           Main (Command Line)
+// ==========================================
+
+namespace {
+std::string usageMessage(const char* programName) {
+  return "Usage: " + std::string(programName) + " [options]\n"; // Shortened for brevity
+}
+bool isFlag(const std::string& arg) { return arg.rfind("--", 0) == 0; }
+int parseInt(const std::string& value, const std::string& flag) { return std::stoi(value); } // Simplified
+unsigned int parseUInt(const std::string& value, const std::string& flag) { return std::stoul(value); }
+double parseDouble(const std::string& value, const std::string& flag) { return std::stod(value); }
+
+SimulationParams parseArgs(int argc, char* argv[]) {
+  SimulationParams params;
+  params.seed = static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count());
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg == "--seed") params.seed = parseUInt(argv[++i], "--seed");
+    else if (arg == "--dimX") params.dimX = parseInt(argv[++i], "--dimX");
+    else if (arg == "--dimY") params.dimY = parseInt(argv[++i], "--dimY");
+    else if (arg == "--simulationTicks") params.simulationTicks = parseInt(argv[++i], "--simulationTicks");
+    else if (arg == "--minConfidenceThreshold") params.minConfidenceThreshold = parseDouble(argv[++i], "--minConfidenceThreshold");
+    else if (arg == "--numMovingCars") params.numMovingCars = parseInt(argv[++i], "--numMovingCars");
+    else if (arg == "--numMovingBikes") params.numMovingBikes = parseInt(argv[++i], "--numMovingBikes");
+    else if (arg == "--numParkedCars") params.numParkedCars = parseInt(argv[++i], "--numParkedCars");
+    else if (arg == "--numStopSigns") params.numStopSigns = parseInt(argv[++i], "--numStopSigns");
+    else if (arg == "--numTrafficLights") params.numTrafficLights = parseInt(argv[++i], "--numTrafficLights");
+    else if (arg == "--gps") {
+      while (i + 1 < argc && !isFlag(argv[i + 1])) {
+        int x = parseInt(argv[++i], "--gps");
+        int y = parseInt(argv[++i], "--gps");
+        params.gpsPath.push_back({x, y});
+      }
+    }
+  }
+  if (params.gpsPath.empty()) throw std::runtime_error("No GPS path provided.");
+  return params;
+}
+}
 
 int main(int argc, char* argv[]) {
   SimulationParams params;
-  try {
-    params = parseArgs(argc, argv);
-  } catch (const std::exception& ex) {
-    std::cerr << "Error: " << ex.what() << "\n\n";
-    std::cerr << usageMessage(argv[0]);
-    return 1;
-  }
+  try { params = parseArgs(argc, argv); } 
+  catch (const std::exception& ex) { return 1; }
 
   std::mt19937 rng(params.seed);
   GridWorld world(params.dimX, params.dimY);
@@ -1027,20 +735,24 @@ int main(int argc, char* argv[]) {
   vis.displayFull(world);
 
   for (int tick = 0; tick < params.simulationTicks; ++tick) {
-    std::system("cls");
+    std::system("cls"); // Correct command for Windows
+    
     world.updateAllObjects();
     vehicle.update();
     vehicle.sense(world, params.minConfidenceThreshold);
     vis.displayPOV(world, vehicle);
-    Sleep(200);
+    
+    // HUD
+    std::cout << "[Tick: " << tick << "] Speed: " << vehicle.speed() 
+              << " | Target: (" << vehicle.target().x << ", " << vehicle.target().y << ")\n";
+
+    Sleep(200); // Correct sleep for Windows
 
     if (!world.inBounds(vehicle.position())) {
       std::cout << "Vehicle left the grid at tick " << tick << ".\n";
       break;
     }
   }
-
   vis.displayFull(world);
-
   return 0;
 }
