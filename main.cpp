@@ -1,6 +1,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <algorithm>
+#include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -72,6 +73,7 @@ class GridWorld {
 
   int width() const { return width_; }
   int height() const { return height_; }
+  const std::vector<std::unique_ptr<WorldObject>>& getObjects() const { return objects_; }
 
  private:
   int width_;
@@ -144,6 +146,8 @@ class TrafficLight : public StaticObject {
       state_ = nextState(state_);
     }
   }
+
+  std::string currentStateName() const { return stateName(state_); }
 
  private:
   static State randomState(std::mt19937& rng) {
@@ -262,6 +266,194 @@ class MovingBike : public MovingObject {
   ~MovingBike() override { std::cout << "[-BIKE: " << id() << "] Removed.\n"; }
 };
 
+struct SensorReading {
+  Position position;
+  std::string type;
+  std::string id;
+  double confidence;
+  std::string trafficLightState{"UNKNOWN"};
+};
+
+class Sensor {
+ public:
+  virtual ~Sensor() = default;
+  virtual std::vector<SensorReading> detect(const GridWorld& world,
+                                            const Position& vehiclePos,
+                                            Direction vehicleDir) = 0;
+
+ protected:
+  double calculateConfidence(double baseAccuracy, double distance, double maxRange) const {
+    static std::mt19937 rng(std::random_device{}());
+    std::uniform_real_distribution<double> noise_dist(-0.05, 0.05);
+    double confidence = baseAccuracy * (1.0 - (distance / maxRange)) + noise_dist(rng);
+    return std::clamp(confidence, 0.0, 1.0);
+  }
+};
+
+namespace {
+
+std::string objectType(const WorldObject& object) {
+  if (dynamic_cast<const MovingCar*>(&object)) {
+    return "MovingCar";
+  }
+  if (dynamic_cast<const MovingBike*>(&object)) {
+    return "MovingBike";
+  }
+  if (dynamic_cast<const ParkedCar*>(&object)) {
+    return "ParkedCar";
+  }
+  if (dynamic_cast<const StopSign*>(&object)) {
+    return "StopSign";
+  }
+  if (dynamic_cast<const TrafficLight*>(&object)) {
+    return "TrafficLight";
+  }
+  if (dynamic_cast<const MovingObject*>(&object)) {
+    return "MovingObject";
+  }
+  if (dynamic_cast<const StaticObject*>(&object)) {
+    return "StaticObject";
+  }
+  return "WorldObject";
+}
+
+double distanceBetween(const Position& a, const Position& b) {
+  return std::hypot(static_cast<double>(a.x - b.x), static_cast<double>(a.y - b.y));
+}
+
+}  // namespace
+
+class LidarSensor : public Sensor {
+ public:
+  std::vector<SensorReading> detect(const GridWorld& world,
+                                    const Position& vehiclePos,
+                                    Direction /*vehicleDir*/) override {
+    constexpr double kRange = 9.0;
+    constexpr double kBaseAccuracy = 0.99;
+    std::vector<SensorReading> readings;
+    for (const auto& object : world.getObjects()) {
+      if (!object) {
+        continue;
+      }
+      const Position& pos = object->position();
+      if (std::abs(pos.x - vehiclePos.x) > 4 || std::abs(pos.y - vehiclePos.y) > 4) {
+        continue;
+      }
+      double distance = distanceBetween(vehiclePos, pos);
+      if (distance > kRange) {
+        continue;
+      }
+      SensorReading reading;
+      reading.position = pos;
+      reading.type = objectType(*object);
+      reading.id = object->id();
+      reading.confidence = calculateConfidence(kBaseAccuracy, distance, kRange);
+      readings.push_back(std::move(reading));
+    }
+    return readings;
+  }
+};
+
+class RadarSensor : public Sensor {
+ public:
+  std::vector<SensorReading> detect(const GridWorld& world,
+                                    const Position& vehiclePos,
+                                    Direction vehicleDir) override {
+    constexpr double kRange = 12.0;
+    constexpr double kBaseAccuracy = 0.95;
+    std::vector<SensorReading> readings;
+    for (const auto& object : world.getObjects()) {
+      if (!object || !dynamic_cast<const MovingObject*>(object.get())) {
+        continue;
+      }
+      const Position& pos = object->position();
+      bool in_line = false;
+      double distance = 0.0;
+      switch (vehicleDir) {
+        case Direction::Up:
+          in_line = pos.x == vehiclePos.x && pos.y <= vehiclePos.y - 1 &&
+                    pos.y >= vehiclePos.y - static_cast<int>(kRange);
+          distance = static_cast<double>(vehiclePos.y - pos.y);
+          break;
+        case Direction::Down:
+          in_line = pos.x == vehiclePos.x && pos.y >= vehiclePos.y + 1 &&
+                    pos.y <= vehiclePos.y + static_cast<int>(kRange);
+          distance = static_cast<double>(pos.y - vehiclePos.y);
+          break;
+        case Direction::Left:
+          in_line = pos.y == vehiclePos.y && pos.x <= vehiclePos.x - 1 &&
+                    pos.x >= vehiclePos.x - static_cast<int>(kRange);
+          distance = static_cast<double>(vehiclePos.x - pos.x);
+          break;
+        case Direction::Right:
+          in_line = pos.y == vehiclePos.y && pos.x >= vehiclePos.x + 1 &&
+                    pos.x <= vehiclePos.x + static_cast<int>(kRange);
+          distance = static_cast<double>(pos.x - vehiclePos.x);
+          break;
+      }
+      if (!in_line) {
+        continue;
+      }
+      SensorReading reading;
+      reading.position = pos;
+      reading.type = objectType(*object);
+      reading.id = object->id();
+      reading.confidence = calculateConfidence(kBaseAccuracy, distance, kRange);
+      readings.push_back(std::move(reading));
+    }
+    return readings;
+  }
+};
+
+class CameraSensor : public Sensor {
+ public:
+  std::vector<SensorReading> detect(const GridWorld& world,
+                                    const Position& vehiclePos,
+                                    Direction vehicleDir) override {
+    constexpr double kRange = 7.0;
+    constexpr double kBaseAccuracy = 0.90;
+    std::vector<SensorReading> readings;
+    Position center = vehiclePos;
+    switch (vehicleDir) {
+      case Direction::Up:
+        center.y -= 4;
+        break;
+      case Direction::Down:
+        center.y += 4;
+        break;
+      case Direction::Left:
+        center.x -= 4;
+        break;
+      case Direction::Right:
+        center.x += 4;
+        break;
+    }
+    for (const auto& object : world.getObjects()) {
+      if (!object) {
+        continue;
+      }
+      const Position& pos = object->position();
+      if (std::abs(pos.x - center.x) > 3 || std::abs(pos.y - center.y) > 3) {
+        continue;
+      }
+      double distance = distanceBetween(vehiclePos, pos);
+      if (distance > kRange) {
+        continue;
+      }
+      SensorReading reading;
+      reading.position = pos;
+      reading.type = objectType(*object);
+      reading.id = object->id();
+      reading.confidence = calculateConfidence(kBaseAccuracy, distance, kRange);
+      if (const auto* light = dynamic_cast<const TrafficLight*>(object.get())) {
+        reading.trafficLightState = light->currentStateName();
+      }
+      readings.push_back(std::move(reading));
+    }
+    return readings;
+  }
+};
+
 void GridWorld::updateAllObjects() {
   for (const auto& object : objects_) {
     if (object) {
@@ -332,16 +524,34 @@ void GridWorld::populate(const SimulationParams& params, std::mt19937& rng) {
 
 class AutonomousVehicle {
  public:
-  explicit AutonomousVehicle(Position start) : position_(start) {}
+  explicit AutonomousVehicle(Position start) : position_(start) {
+    sensors_.push_back(std::make_unique<LidarSensor>());
+    sensors_.push_back(std::make_unique<RadarSensor>());
+    sensors_.push_back(std::make_unique<CameraSensor>());
+  }
 
   void update() {
     // Placeholder for future navigation logic.
   }
 
+  void sense(const GridWorld& world) {
+    std::size_t total_readings = 0;
+    for (const auto& sensor : sensors_) {
+      if (!sensor) {
+        continue;
+      }
+      total_readings += sensor->detect(world, position_, direction_).size();
+    }
+    std::cout << "[SENSORS] Total readings: " << total_readings << "\n";
+  }
+
   const Position& position() const { return position_; }
+  Direction direction() const { return direction_; }
 
  private:
   Position position_;
+  Direction direction_{Direction::Up};
+  std::vector<std::unique_ptr<Sensor>> sensors_;
 };
 
 namespace {
@@ -514,6 +724,7 @@ int main(int argc, char* argv[]) {
   for (int tick = 0; tick < params.simulationTicks; ++tick) {
     world.updateAllObjects();
     vehicle.update();
+    vehicle.sense(world);
 
     if (!world.inBounds(vehicle.position())) {
       std::cout << "Vehicle left the grid at tick " << tick << ".\n";
