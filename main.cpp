@@ -587,14 +587,15 @@ void GridWorld::populate(const SimulationParams& params, std::mt19937& rng) {
 
 class AutonomousVehicle {
  public:
-  explicit AutonomousVehicle(Position start) : position_(start) {
+  AutonomousVehicle(Position start, std::vector<Position> gps_path)
+      : position_(start), gps_path_(std::move(gps_path)) {
     sensors_.push_back(std::make_unique<LidarSensor>());
     sensors_.push_back(std::make_unique<RadarSensor>());
     sensors_.push_back(std::make_unique<CameraSensor>());
   }
 
   void update() {
-    // Placeholder for future navigation logic.
+    decideNextMove();
   }
 
   void sense(const GridWorld& world, double minConfidence) {
@@ -618,11 +619,114 @@ class AutonomousVehicle {
   Direction direction() const { return direction_; }
 
  private:
+  bool checkEmergencyStop(const std::vector<SensorReading>& objects) {
+    for (const auto& object : objects) {
+      bool in_front = false;
+      switch (direction_) {
+        case Direction::Up:
+          in_front = object.position.y < position_.y;
+          break;
+        case Direction::Down:
+          in_front = object.position.y > position_.y;
+          break;
+        case Direction::Left:
+          in_front = object.position.x < position_.x;
+          break;
+        case Direction::Right:
+          in_front = object.position.x > position_.x;
+          break;
+      }
+      if (!in_front) {
+        continue;
+      }
+
+      double distance = distanceBetween(position_, object.position);
+      if (distance < 2.0) {
+        return true;
+      }
+      if (object.type == "TrafficLight" &&
+          (object.trafficLightState == "RED" || object.trafficLightState == "YELLOW") &&
+          distance < 3.0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void decideNextMove() {
+    if (checkEmergencyStop(fused_data_)) {
+      speed_state_ = 0;
+      return;
+    }
+    speed_state_ = std::min(speed_state_ + 1, 2);
+
+    if (current_gps_index_ >= static_cast<int>(gps_path_.size())) {
+      speed_state_ = 0;
+      return;
+    }
+
+    Position target = gps_path_[current_gps_index_];
+    if (distanceBetween(position_, target) == 0.0) {
+      ++current_gps_index_;
+      if (current_gps_index_ >= static_cast<int>(gps_path_.size())) {
+        std::cout << "Destination Reached!\n";
+        speed_state_ = 0;
+        return;
+      }
+      target = gps_path_[current_gps_index_];
+    }
+
+    if (position_.x < target.x) {
+      direction_ = Direction::Right;
+    } else if (position_.x > target.x) {
+      direction_ = Direction::Left;
+    } else if (position_.y < target.y) {
+      direction_ = Direction::Down;
+    } else if (position_.y > target.y) {
+      direction_ = Direction::Up;
+    }
+
+    std::cout << "[NAV] Pos: " << toString(position_) << " -> Target: "
+              << toString(target) << " | Speed: " << speed_state_ << ".\n";
+
+    if (speed_state_ == 0) {
+      return;
+    }
+
+    Position next = position_;
+    switch (direction_) {
+      case Direction::Up: {
+        int delta = std::min(speed_state_, std::abs(position_.y - target.y));
+        next.y -= delta;
+        break;
+      }
+      case Direction::Down: {
+        int delta = std::min(speed_state_, std::abs(position_.y - target.y));
+        next.y += delta;
+        break;
+      }
+      case Direction::Left: {
+        int delta = std::min(speed_state_, std::abs(position_.x - target.x));
+        next.x -= delta;
+        break;
+      }
+      case Direction::Right: {
+        int delta = std::min(speed_state_, std::abs(position_.x - target.x));
+        next.x += delta;
+        break;
+      }
+    }
+    position_ = next;
+  }
+
   Position position_;
   Direction direction_{Direction::Up};
   std::vector<std::unique_ptr<Sensor>> sensors_;
   SensorFusion fusion_engine_;
   std::vector<SensorReading> fused_data_;
+  std::vector<Position> gps_path_;
+  int current_gps_index_{0};
+  int speed_state_{0};
 };
 
 namespace {
@@ -790,7 +894,7 @@ int main(int argc, char* argv[]) {
   std::mt19937 rng(params.seed);
   GridWorld world(params.dimX, params.dimY);
   world.populate(params, rng);
-  AutonomousVehicle vehicle(params.gpsPath.front());
+  AutonomousVehicle vehicle(params.gpsPath.front(), params.gpsPath);
 
   for (int tick = 0; tick < params.simulationTicks; ++tick) {
     world.updateAllObjects();
