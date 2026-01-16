@@ -1,8 +1,8 @@
 #include "MovingObjects.h"
-#include "GridWorld.h" // Needed for inBounds check
+#include "GridWorld.h" // bounds check
 #include <iostream>
 
-// MovingObject
+// moving object stuff
 MovingObject::MovingObject(std::string id, char glyph, Position position, const GridWorld* world, int speed, Direction direction)
     : WorldObject(std::move(id), glyph, position, world),
       speed_(speed),
@@ -17,7 +17,7 @@ void MovingObject::update() {
     case Direction::Right: next.x += speed_; break;
   }
   setPosition(next);
-  // Check bounds using the world pointer
+  // check if it went out bounds
   if (world() && !world()->inBounds(next)) {
     markForRemoval();
   }
@@ -26,13 +26,13 @@ void MovingObject::update() {
 int MovingObject::speed() const { return speed_; }
 Direction MovingObject::direction() const { return direction_; }
 
-// MovingCar
+// moving car
 MovingCar::MovingCar(const Position& position, const GridWorld* world, int speed, Direction direction)
     : MovingObject(generateId("CAR"), 'C', position, world, speed, direction) {
   std::cout << "[+CAR: " << id() << "] Initialized at " << toString(position) << ".\n";
 }
 
-// MovingBike
+// moving bike
 MovingBike::MovingBike(const Position& position, const GridWorld* world, int speed, Direction direction)
     : MovingObject(generateId("BIKE"), 'B', position, world, speed, direction) {
   std::cout << "[+BIKE: " << id() << "] Initialized at " << toString(position) << ".\n";

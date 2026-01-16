@@ -7,9 +7,7 @@
 #include "Vehicle.h"
 #include "Visualization.h"
 
-// ==========================================
-//    CROSS-PLATFORM COMPATIBILITY
-// ==========================================
+// για να δουλευει και σε windows kai linux
 #ifdef _WIN32
     #include <windows.h>
     void clearScreen() { std::system("cls"); }
@@ -30,8 +28,10 @@ unsigned int parseUInt(const std::string& value, const std::string& flag) { retu
 double parseDouble(const std::string& value, const std::string& flag) { return std::stod(value); }
 
 SimulationParams parseArgs(int argc, char* argv[]) {
+  // setup vars
   SimulationParams params;
   params.seed = static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count());
+  // loop through args
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg == "--seed") params.seed = parseUInt(argv[++i], "--seed");
@@ -45,6 +45,7 @@ SimulationParams parseArgs(int argc, char* argv[]) {
     else if (arg == "--numStopSigns") params.numStopSigns = parseInt(argv[++i], "--numStopSigns");
     else if (arg == "--numTrafficLights") params.numTrafficLights = parseInt(argv[++i], "--numTrafficLights");
     else if (arg == "--gps") {
+      // loop coords
       while (i + 1 < argc && !isFlag(argv[i + 1])) {
         int x = parseInt(argv[++i], "--gps");
         int y = parseInt(argv[++i], "--gps");
@@ -72,7 +73,7 @@ int main(int argc, char* argv[]) {
   AutonomousVehicle vehicle(params.gpsPath.front(), params.gpsPath);
   Visualization vis;
 
-  // Visualization START (Full)
+  // show stuff at start
   vis.displayFull(world, vehicle);
 
   for (int tick = 0; tick < params.simulationTicks; ++tick) {
@@ -83,7 +84,7 @@ int main(int argc, char* argv[]) {
     vehicle.sense(world, params.minConfidenceThreshold);
     vis.displayPOV(world, vehicle); 
     
-    // HUD
+    // show info
     std::cout << "[Tick: " << tick << "] Speed: " << vehicle.speed() 
               << " | Target: (" << vehicle.target().x << ", " << vehicle.target().y << ")\n";
 
@@ -95,7 +96,7 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  // Visualization END (Full)
+  // show stuff at end
   vis.displayFull(world, vehicle);
   return 0;
 }

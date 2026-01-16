@@ -7,9 +7,7 @@
 #include <unordered_map>
 #include <random>
 
-// ==========================================
-//           Data Structures
-// ==========================================
+
 
 struct Position {
   int x{0};
@@ -32,9 +30,6 @@ struct SimulationParams {
   std::vector<Position> gpsPath;
 };
 
-// ==========================================
-//           Helper Functions
-// ==========================================
 
 // Template must be in the header
 template <typename T>
@@ -44,7 +39,7 @@ T my_clamp(T value, T minimum, T maximum) {
   return value;
 }
 
-// Inline ensures these functions can be included in multiple files without error
+//inline για να βαλουμε τα funcs σε πολλα files χωρις προβλημα
 inline std::string generateId(const std::string& category) {
   static std::unordered_map<std::string, int> counts;
   int next = ++counts[category];

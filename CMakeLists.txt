@@ -4,7 +4,7 @@ project(SelfDrivingSimulation)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Define all your source files here
+
 set(SOURCES
     main.cpp
     GridWorld.cpp
@@ -16,5 +16,5 @@ set(SOURCES
     Visualization.cpp
 )
 
-# Create the executable
+
 add_executable(simulation ${SOURCES})

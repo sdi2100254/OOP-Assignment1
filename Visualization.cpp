@@ -44,20 +44,20 @@ void Visualization::printColored(char glyph) const {
 }
 
 char Visualization::glyphAt(const GridWorld& world, const Position& position, const AutonomousVehicle* vehicle) const {
-    // 1. Vehicle (@) - Highest Priority
+    // vehicle first
     if (vehicle && vehicle->position().x == position.x && vehicle->position().y == position.y) return '@';
 
-    // 2. Moving Bike (B)
+    // check for bikes
     for (const auto& object : world.getObjects()) {
       if (object && object->position().x == position.x && object->position().y == position.y && dynamic_cast<const MovingBike*>(object.get())) return 'B';
     }
 
-    // 3. Moving Car (C)
+    // check for moving cars
     for (const auto& object : world.getObjects()) {
       if (object && object->position().x == position.x && object->position().y == position.y && dynamic_cast<const MovingCar*>(object.get())) return 'C';
     }
     
-    // 4. Traffic Lights (R/G/Y)
+    // check traffic light 
     for (const auto& object : world.getObjects()) {
       if (object && object->position().x == position.x && object->position().y == position.y) {
           if (const auto* light = dynamic_cast<const TrafficLight*>(object.get())) {
@@ -70,12 +70,12 @@ char Visualization::glyphAt(const GridWorld& world, const Position& position, co
       }
     }
     
-    // 5. Stop Sign (S)
+    // stop sign check
     for (const auto& object : world.getObjects()) {
       if (object && object->position().x == position.x && object->position().y == position.y && dynamic_cast<const StopSign*>(object.get())) return 'S';
     }
 
-    // 6. Parked Car (P)
+    // parked cars 
     for (const auto& object : world.getObjects()) {
       if (object && object->position().x == position.x && object->position().y == position.y && dynamic_cast<const ParkedCar*>(object.get())) return 'P';
     }

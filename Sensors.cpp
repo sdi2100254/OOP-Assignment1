@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <cmath>
 
-// Helper to identify object types
+// figure out what type of object it is
 namespace {
 std::string objectType(const WorldObject& object) {
   if (dynamic_cast<const MovingCar*>(&object)) return "MovingCar";
@@ -29,7 +29,7 @@ double Sensor::calculateConfidence(double baseAccuracy, double distance, double 
   return my_clamp(confidence, 0.0, 1.0);
 }
 
-// Sensor Fusion
+// fusing all the sensor data 
 std::vector<SensorReading> SensorFusion::fuse(const std::vector<std::vector<SensorReading>>& allReadings, double minConfidence) const {
   struct Aggregate {
     SensorReading best_reading;
@@ -64,7 +64,7 @@ std::vector<SensorReading> SensorFusion::fuse(const std::vector<std::vector<Sens
     fused_reading.confidence = bucket.count > 0 ? bucket.confidence_sum / static_cast<double>(bucket.count) : 0.0;
     fused_reading.trafficLightState = bucket.traffic_state;
 
-    // "If a sensor detects a bike, it is not rejected" (Section 3)
+    // bikes always pass thru
     if (fused_reading.type == "MovingBike" || fused_reading.confidence > minConfidence) {
       fused.push_back(std::move(fused_reading));
     }
@@ -80,7 +80,7 @@ std::vector<SensorReading> LidarSensor::detect(const GridWorld& world, const Pos
   for (const auto& object : world.getObjects()) {
     if (!object) continue;
     const Position& pos = object->position();
-    // 9x9 centered = +/- 4 cells
+    // 9x9 grid 
     if (std::abs(pos.x - vehiclePos.x) > 4 || std::abs(pos.y - vehiclePos.y) > 4) continue;
     double distance = distanceBetween(vehiclePos, pos);
     if (distance > kRange) continue;
@@ -105,7 +105,7 @@ std::vector<SensorReading> RadarSensor::detect(const GridWorld& world, const Pos
     const Position& pos = object->position();
     bool in_line = false;
     double distance = 0.0;
-    // "12 cells straight ahead" (Section 2.2.2)
+    // 12 cells forward
     switch (vehicleDir) {
       case Direction::Up:
         in_line = pos.x == vehiclePos.x && pos.y <= vehiclePos.y - 1 && pos.y >= vehiclePos.y - static_cast<int>(kRange);
@@ -141,7 +141,7 @@ std::vector<SensorReading> CameraSensor::detect(const GridWorld& world, const Po
   constexpr double kBaseAccuracy = 0.90;
   std::vector<SensorReading> readings;
   Position center = vehiclePos;
-  // 7x7 square directly in front (Section 2.2.3)
+  // 7x7 square in front
   switch (vehicleDir) {
     case Direction::Up:    center.y -= 4; break;
     case Direction::Down:  center.y += 4; break;
@@ -151,7 +151,7 @@ std::vector<SensorReading> CameraSensor::detect(const GridWorld& world, const Po
   for (const auto& object : world.getObjects()) {
     if (!object) continue;
     const Position& pos = object->position();
-    // +/- 3 cells around the center = 7x7
+    // area around center 
     if (std::abs(pos.x - center.x) > 3 || std::abs(pos.y - center.y) > 3) continue;
     double distance = distanceBetween(vehiclePos, pos);
     if (distance > kRange) continue;
