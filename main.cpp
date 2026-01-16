@@ -268,9 +268,11 @@ void GridWorld::updateAllObjects() {
       object->update();
     }
   }
-  std::erase_if(objects_, [](const std::unique_ptr<WorldObject>& object) {
-    return object && object->markedForRemoval();
-  });
+  auto it = std::remove_if(objects_.begin(), objects_.end(),
+                           [](const std::unique_ptr<WorldObject>& object) {
+                             return object && object->markedForRemoval();
+                           });
+  objects_.erase(it, objects_.end());
 }
 
 void GridWorld::populate(const SimulationParams& params, std::mt19937& rng) {
