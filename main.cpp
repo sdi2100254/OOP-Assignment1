@@ -11,6 +11,8 @@
 #include <unordered_set>
 #include <string>
 #include <vector>
+#include <windows.h>
+
 
 struct Position {
   int x{0};
@@ -979,11 +981,12 @@ int main(int argc, char* argv[]) {
   vis.displayFull(world);
 
   for (int tick = 0; tick < params.simulationTicks; ++tick) {
-    std::system("clear");
+    std::system("cls");
     world.updateAllObjects();
     vehicle.update();
     vehicle.sense(world, params.minConfidenceThreshold);
     vis.displayPOV(world, vehicle);
+    Sleep(200);
 
     if (!world.inBounds(vehicle.position())) {
       std::cout << "Vehicle left the grid at tick " << tick << ".\n";
