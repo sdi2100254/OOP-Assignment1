@@ -2,14 +2,15 @@
 #include <vector>
 #include <memory>
 #include <random>
-#include "Common.h" // For SimulationParams
+#include "Common.h"
 
-// Forward declaration to avoid circular includes if needed
+
 class WorldObject; 
 
 class GridWorld {
  public:
-  GridWorld(int width, int height); // Constructor declaration only
+  GridWorld(int width, int height);
+  ~GridWorld();
 
   bool inBounds(const Position& position) const;
   void updateAllObjects();
