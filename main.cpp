@@ -881,6 +881,85 @@ SimulationParams parseArgs(int argc, char* argv[]) {
 
 }  // namespace
 
+class Visualization {
+ public:
+  void displayFull(const GridWorld& world) const {
+    std::cout << "=== Full Grid View ===\n";
+    for (int y = 0; y < world.height(); ++y) {
+      for (int x = 0; x < world.width(); ++x) {
+        std::cout << glyphAt(world, {x, y}, nullptr);
+      }
+      std::cout << "\n";
+    }
+  }
+
+  void displayPOV(const GridWorld& world, const AutonomousVehicle& vehicle) const {
+    constexpr int kRadius = 5;
+    const int view_size = kRadius * 2 + 1;
+    std::cout << "=== Vehicle Camera Feed ===\n";
+    std::cout << "+" << std::string(view_size, '-') << "+\n";
+    for (int dy = -kRadius; dy <= kRadius; ++dy) {
+      std::cout << "|";
+      for (int dx = -kRadius; dx <= kRadius; ++dx) {
+        Position pos{vehicle.position().x + dx, vehicle.position().y + dy};
+        if (!world.inBounds(pos)) {
+          std::cout << " ";
+          continue;
+        }
+        std::cout << glyphAt(world, pos, &vehicle);
+      }
+      std::cout << "|\n";
+    }
+    std::cout << "+" << std::string(view_size, '-') << "+\n";
+  }
+
+ private:
+  char glyphAt(const GridWorld& world,
+               const Position& position,
+               const AutonomousVehicle* vehicle) const {
+    if (vehicle && vehicle->position().x == position.x &&
+        vehicle->position().y == position.y) {
+      return '@';
+    }
+    for (const auto& object : world.getObjects()) {
+      if (object && object->position().x == position.x &&
+          object->position().y == position.y &&
+          dynamic_cast<const TrafficLight*>(object.get())) {
+        return 'L';
+      }
+    }
+    for (const auto& object : world.getObjects()) {
+      if (object && object->position().x == position.x &&
+          object->position().y == position.y &&
+          dynamic_cast<const StopSign*>(object.get())) {
+        return 'S';
+      }
+    }
+    for (const auto& object : world.getObjects()) {
+      if (object && object->position().x == position.x &&
+          object->position().y == position.y &&
+          dynamic_cast<const MovingCar*>(object.get())) {
+        return 'C';
+      }
+    }
+    for (const auto& object : world.getObjects()) {
+      if (object && object->position().x == position.x &&
+          object->position().y == position.y &&
+          dynamic_cast<const MovingBike*>(object.get())) {
+        return 'B';
+      }
+    }
+    for (const auto& object : world.getObjects()) {
+      if (object && object->position().x == position.x &&
+          object->position().y == position.y &&
+          dynamic_cast<const ParkedCar*>(object.get())) {
+        return 'P';
+      }
+    }
+    return '.';
+  }
+};
+
 int main(int argc, char* argv[]) {
   SimulationParams params;
   try {
@@ -895,17 +974,24 @@ int main(int argc, char* argv[]) {
   GridWorld world(params.dimX, params.dimY);
   world.populate(params, rng);
   AutonomousVehicle vehicle(params.gpsPath.front(), params.gpsPath);
+  Visualization vis;
+
+  vis.displayFull(world);
 
   for (int tick = 0; tick < params.simulationTicks; ++tick) {
+    std::system("clear");
     world.updateAllObjects();
     vehicle.update();
     vehicle.sense(world, params.minConfidenceThreshold);
+    vis.displayPOV(world, vehicle);
 
     if (!world.inBounds(vehicle.position())) {
       std::cout << "Vehicle left the grid at tick " << tick << ".\n";
       break;
     }
   }
+
+  vis.displayFull(world);
 
   return 0;
 }
