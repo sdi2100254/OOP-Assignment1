@@ -889,7 +889,7 @@ class Visualization {
     std::cout << "=== Full Grid View ===\n";
     for (int y = 0; y < world.height(); ++y) {
       for (int x = 0; x < world.width(); ++x) {
-        std::cout << glyphAt(world, {x, y}, nullptr);
+        printColored(glyphAt(world, {x, y}, nullptr));
       }
       std::cout << "\n";
     }
@@ -908,7 +908,7 @@ class Visualization {
           std::cout << " ";
           continue;
         }
-        std::cout << glyphAt(world, pos, &vehicle);
+        printColored(glyphAt(world, pos, &vehicle));
       }
       std::cout << "|\n";
     }
@@ -916,6 +916,33 @@ class Visualization {
   }
 
  private:
+  void printColored(char glyph) const {
+    switch (glyph) {
+      case 'R':
+      case 'S':
+        std::cout << RED << glyph << RESET;
+        break;
+      case 'G':
+        std::cout << GREEN << glyph << RESET;
+        break;
+      case 'Y':
+        std::cout << YELLOW << glyph << RESET;
+        break;
+      case 'C':
+        std::cout << BLUE << glyph << RESET;
+        break;
+      case 'B':
+        std::cout << MAGENTA << glyph << RESET;
+        break;
+      case '@':
+        std::cout << CYAN << glyph << RESET;
+        break;
+      default:
+        std::cout << glyph;
+        break;
+    }
+  }
+
   char glyphAt(const GridWorld& world,
                const Position& position,
                const AutonomousVehicle* vehicle) const {
@@ -927,6 +954,17 @@ class Visualization {
       if (object && object->position().x == position.x &&
           object->position().y == position.y &&
           dynamic_cast<const TrafficLight*>(object.get())) {
+        const auto* light = dynamic_cast<const TrafficLight*>(object.get());
+        const std::string state = light ? light->currentStateName() : "RED";
+        if (state == "RED") {
+          return 'R';
+        }
+        if (state == "GREEN") {
+          return 'G';
+        }
+        if (state == "YELLOW") {
+          return 'Y';
+        }
         return 'L';
       }
     }
@@ -960,6 +998,14 @@ class Visualization {
     }
     return '.';
   }
+
+  const std::string RESET = "\033[0m";
+  const std::string RED = "\033[31m";
+  const std::string GREEN = "\033[32m";
+  const std::string YELLOW = "\033[33m";
+  const std::string BLUE = "\033[34m";
+  const std::string MAGENTA = "\033[35m";
+  const std::string CYAN = "\033[36m";
 };
 
 int main(int argc, char* argv[]) {
