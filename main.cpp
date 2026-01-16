@@ -641,7 +641,7 @@ class AutonomousVehicle {
       }
 
       double distance = distanceBetween(position_, object.position);
-      if (distance < 2.0) {
+      if (distance <= 2.0) {
         return true;
       }
       if (object.type == "TrafficLight" &&
